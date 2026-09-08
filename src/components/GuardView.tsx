@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 
 interface Incident {
   id: number;
@@ -20,6 +21,22 @@ interface SecurityObject {
   latitude: number | null;
   longitude: number | null;
 }
+
+// Кастомна іконка для машини екіпажу (яскраво-синій круг із машиною або чіткий бідж)
+const carIcon = L.divIcon({
+  className: 'custom-car-marker',
+  html: `<div style="background-color: #2563eb; width: 24px; height: 24px; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">🚗</div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
+
+// Кастомна іконка для звичайних об'єктів охорони
+const objectIcon = L.divIcon({
+  className: 'custom-object-marker',
+  html: `<div style="background-color: #64748b; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
 
 export default function GuardView() {
   const [activeIncident, setActiveIncident] = useState<Incident | null>(null);
@@ -171,7 +188,7 @@ export default function GuardView() {
           {allObjects.map((obj) => {
             if (obj.latitude && obj.longitude) {
               return (
-                <Marker key={obj.id} position={[obj.latitude, obj.longitude]}>
+                <Marker key={obj.id} position={[obj.latitude, obj.longitude]} icon={objectIcon}>
                   <Popup>
                     <strong>{obj.name}</strong><br />
                     {obj.address}
@@ -184,7 +201,7 @@ export default function GuardView() {
 
           {/* 2. МАРКЕР АВТО ЕКІПАЖУ */}
           {myLocation && (
-            <Marker position={[myLocation.lat, myLocation.lon]}>
+            <Marker position={[myLocation.lat, myLocation.lon]} icon={carIcon}>
               <Popup>Ваш екіпаж</Popup>
             </Marker>
           )}
