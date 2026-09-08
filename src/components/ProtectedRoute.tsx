@@ -8,19 +8,21 @@ export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const token = localStorage.getItem('token');
   const role = localStorage.getItem('role');
 
-  // Якщо немає токена взагалі — викидаємо на логін
+  // 1. Якщо немає токена або ролі взагалі — викидаємо на сторінку входу
   if (!token || !role) {
     return <Navigate to="/login" replace />;
   }
 
-  // Якщо роль користувача НЕ входить у список дозволених для цього маршруту
+  // 2. Якщо роль користувача НЕ входить у список дозволених для цього маршруту
   if (!allowedRoles.includes(role)) {
-    // Якщо це охоронець, який лізе в адмінку — повертаємо його на карту
-    if (role === 'guard') return <Navigate to="/guard" replace />;
-    // Якщо це адмін, який лізе на сторінку екіпажу — повертаємо на дашборд
+    // ЖОРСТКИЙ КОНТРОЛЬ: Якщо це охоронець, він ЗАВЖДИ має сидіти на /guard
+    if (role === 'guard') {
+      return <Navigate to="/guard" replace />;
+    }
+    // Якщо це адмін/диспетчер, який заблукав — повертаємо на головну
     return <Navigate to="/" replace />;
   }
 
-  // Якщо все добре, рендеримо дочірні компоненти
+  // 3. Якщо все добре, дозволяємо перегляд компонента
   return <Outlet />;
 }
