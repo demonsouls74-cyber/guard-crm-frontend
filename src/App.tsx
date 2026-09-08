@@ -9,6 +9,7 @@ import Clients from './components/Clients';
 import Accounting from './components/Accounting';
 import Personnel from './components/Personnel';
 import GuardView from './components/GuardView';
+import ProtectedRoute from './components/ProtectedRoute';
 
 
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
@@ -20,16 +21,27 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Відкритий маршрут для входу */}
         <Route path="/login" element={<Login />} />
-        
-        <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
-        <Route path="/objects" element={<PrivateRoute><SecurityObjects /></PrivateRoute>} />
-        <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-        <Route path="/audit" element={<PrivateRoute><AuditLog /></PrivateRoute>} />
-        <Route path="/accounting" element={<PrivateRoute><Accounting /></PrivateRoute>} />
-        <Route path="/personnel" element={<PrivateRoute><Personnel /></PrivateRoute>} />
-        <Route path="/guard" element={<PrivateRoute><GuardView /></PrivateRoute>} />
 
+
+        {/* МАРШРУТИ ТІЛЬКИ ДЛЯ ОХОРОНИ (ЕКІПАЖУ)        */}
+        <Route element={<ProtectedRoute allowedRoles={['guard']} />}>
+          <Route path="/guard" element={<GuardView />} />
+        </Route>
+
+        {/* МАРШРУТИ ДЛЯ АДМІНІВ ТА ДИСПЕТЧЕРІВ */}
+        <Route element={<ProtectedRoute allowedRoles={['admin', 'dispatcher']} />}>
+          <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
+          <Route path="/objects" element={<PrivateRoute><SecurityObjects /></PrivateRoute>} />
+          <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/audit" element={<PrivateRoute><AuditLog /></PrivateRoute>} />
+          <Route path="/accounting" element={<PrivateRoute><Accounting /></PrivateRoute>} />
+          <Route path="/personnel" element={<PrivateRoute><Personnel /></PrivateRoute>} />
+        </Route>
+
+        {/* Якщо адреса не знайдена, кидаємо на корінь, а там ProtectedRoute сам розбереться */}
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
   );
