@@ -13,13 +13,23 @@ interface Incident {
   status: string;
 }
 
+interface SecurityObject {
+  id: number;
+  name: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export default function GuardView() {
   const [activeIncident, setActiveIncident] = useState<Incident | null>(null);
+  const [allObjects, setAllObjects] = useState<SecurityObject[]>([]);
   const [myLocation, setMyLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
   
   const wsRef = useRef<WebSocket | null>(null);
 
+  // 1. Завантаження активної тривоги
   const fetchMyIncident = async () => {
     try {
       const response = await api.get('/incidents/');
@@ -32,15 +42,23 @@ export default function GuardView() {
     }
   };
 
+  // 2. Завантаження всіх об'єктів для карти патрулювання
+  const fetchAllObjects = async () => {
+    try {
+      const response = await api.get('/objects/');
+      setAllObjects(response.data);
+    } catch (error) {
+      console.error('Помилка завантаження об’єктів:', error);
+    }
+  };
+
   // ФУНКЦІЯ ПРОКЛАДАННЯ МАРШРУТУ (OSRM API)
   const getRoute = async (startLat: number, startLon: number, endLat: number, endLon: number) => {
     try {
-      // OSRM приймає координати у форматі [довгота, широта]!
       const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`);
       const data = await response.json();
       
       if (data.routes && data.routes.length > 0) {
-        // Leaflet потребує масив [широта, довгота], тому перевертаємо координати
         const route = data.routes[0].geometry.coordinates.map((coord: [number, number]) => [coord[1], coord[0]]);
         setRouteCoords(route);
       }
@@ -51,6 +69,7 @@ export default function GuardView() {
 
   useEffect(() => {
     fetchMyIncident();
+    fetchAllObjects();
 
     // РОЗУМНИЙ WEBSOCKET З АВТОПЕРЕПІДКЛЮЧЕННЯМ
     const connectWebSocket = () => {
@@ -59,6 +78,7 @@ export default function GuardView() {
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        // Будь-який сигнал про нову тривогу або зміну статусу змушує оновити дані
         if (data.type === 'NEW_INCIDENT' || data.type === 'UPDATE_INCIDENT') {
           fetchMyIncident();
         }
@@ -73,6 +93,12 @@ export default function GuardView() {
     };
 
     connectWebSocket();
+
+    // РЕХУЛЯРНЕ ФОНОВЕ ОПИТУВАННЯ (FALLBACK) КОЖНІ 5 СЕКУНД
+    // Гарантує, що навіть якщо WebSocket "мовчить", тривога все одно з'явиться автоматично
+    const pollingInterval = setInterval(() => {
+      fetchMyIncident();
+    }, 5000);
 
     // АВТОМАТИЧНИЙ GPS-ТРЕКЕР
     let watchId: number;
@@ -94,11 +120,12 @@ export default function GuardView() {
 
     return () => {
       if (wsRef.current) wsRef.current.close();
+      clearInterval(pollingInterval);
       if (watchId) navigator.geolocation.clearWatch(watchId);
     };
   }, []);
 
-// МАЛЮЄМО МАРШРУТ ПРИ ПРИЙНЯТТІ ВИКЛИКУ
+  // МАЛЮЄМО МАРШРУТ ПРИ ПРИЙНЯТТІ ВИКЛИКУ
   useEffect(() => {
     if (
       activeIncident?.status === 'ACKNOWLEDGED' && 
@@ -115,7 +142,7 @@ export default function GuardView() {
     } else {
       setRouteCoords([]); 
     }
-  }, [activeIncident?.status, myLocation]);;
+  }, [activeIncident?.status, myLocation]);
 
   const handleAcknowledge = async () => {
     if (!activeIncident) return;
@@ -140,21 +167,29 @@ export default function GuardView() {
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
-          {/* Маркер авто */}
+          {/* 1. ВСІ ОБ'ЄКТИ ОХОРОНИ НА КАРТІ (РЕЖИМ ПАТРУЛЮВАННЯ) */}
+          {allObjects.map((obj) => {
+            if (obj.latitude && obj.longitude) {
+              return (
+                <Marker key={obj.id} position={[obj.latitude, obj.longitude]}>
+                  <Popup>
+                    <strong>{obj.name}</strong><br />
+                    {obj.address}
+                  </Popup>
+                </Marker>
+              );
+            }
+            return null;
+          })}
+
+          {/* 2. МАРКЕР АВТО ЕКІПАЖУ */}
           {myLocation && (
             <Marker position={[myLocation.lat, myLocation.lon]}>
-              <Popup>Екіпаж</Popup>
+              <Popup>Ваш екіпаж</Popup>
             </Marker>
           )}
 
-          {/* Маркер об'єкта під час тривоги */}
-          {activeIncident?.object_latitude && activeIncident?.object_longitude && (
-            <Marker position={[activeIncident.object_latitude, activeIncident.object_longitude]}>
-              <Popup>Об'єкт: {activeIncident.object_name}</Popup>
-            </Marker>
-          )}
-
-          {/* Лінія маршруту */}
+          {/* 3. ЛІНІЯ МАРШРУТУ ДО ОБ'ЄКТА */}
           {routeCoords.length > 0 && (
             <Polyline positions={routeCoords} color="#3b82f6" weight={5} opacity={0.8} />
           )}
