@@ -25,7 +25,7 @@ interface SecurityObject {
 // Кастомна іконка для машини екіпажу (яскраво-синій круг із машиною або чіткий бідж)
 const carIcon = L.divIcon({
   className: 'custom-car-marker',
-  html: `<div style="background-color: #2563eb; width: 24px; height: 24px; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">🚗</div>`,
+  html: `<div style="background-color: #4dff29; width: 24px; height: 24px; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">🚗</div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12],
 });
@@ -33,7 +33,7 @@ const carIcon = L.divIcon({
 // Кастомна іконка для звичайних об'єктів охорони
 const objectIcon = L.divIcon({
   className: 'custom-object-marker',
-  html: `<div style="background-color: #64748b; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>`,
+  html: `<div style="background-color: #6aa8ff; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>`,
   iconSize: [18, 18],
   iconAnchor: [9, 9],
 });
