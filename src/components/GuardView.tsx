@@ -1,183 +1,138 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../api';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css'; // Обов'язково для карти!
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 interface Incident {
   id: number;
-  object_id: number;
   object_name: string;
   object_address: string;
+  object_latitude: number | null;
+  object_longitude: number | null;
   object_instructions: string | null;
-  client_name: string | null;
-  client_phone: string | null;
   status: string;
-  guard_id: number | null;
 }
 
 export default function GuardView() {
   const [activeIncident, setActiveIncident] = useState<Incident | null>(null);
-  const [loading, setLoading] = useState(true);
   const [myLocation, setMyLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // 1. ФУНКЦІЯ ОТРИМАННЯ ТРИВОГИ
   const fetchMyIncident = async () => {
     try {
       const response = await api.get('/incidents/');
-      // Шукаємо активну тривогу (в ідеалі тут має бути фільтр по ID поточного охоронця)
       const current = response.data.find(
         (inc: Incident) => inc.status === 'DISPATCHED' || inc.status === 'ACKNOWLEDGED'
       );
       setActiveIncident(current || null);
     } catch (error) {
       console.error('Помилка завантаження тривог:', error);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  // ФУНКЦІЯ ПРОКЛАДАННЯ МАРШРУТУ (OSRM API)
+  const getRoute = async (startLat: number, startLon: number, endLat: number, endLon: number) => {
+    try {
+      // OSRM приймає координати у форматі [довгота, широта]!
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`);
+      const data = await response.json();
+      
+      if (data.routes && data.routes.length > 0) {
+        // Leaflet потребує масив [широта, довгота], тому перевертаємо координати
+        const route = data.routes[0].geometry.coordinates.map((coord: [number, number]) => [coord[1], coord[0]]);
+        setRouteCoords(route);
+      }
+    } catch (error) {
+      console.error("Не вдалося прокласти маршрут:", error);
     }
   };
 
   useEffect(() => {
-    // При відкритті екрану одразу перевіряємо, чи є тривога
     fetchMyIncident();
 
-    // ==========================================
-    // 2. ПІДКЛЮЧАЄМО WEBSOCKET ("ТЕЛЕФОННИЙ ДЗВІНОК")
-    // ==========================================
-    //  wss:// замість https://
-    const wsUrl = 'wss://guard-crm-backend-1.onrender.com/ws/incidents';
-    const ws = new WebSocket(wsUrl);
+    // РОЗУМНИЙ WEBSOCKET З АВТОПЕРЕПІДКЛЮЧЕННЯМ
+    const connectWebSocket = () => {
+      const wsUrl = 'wss://guard-crm-backend-1.onrender.com/ws/incidents';
+      const ws = new WebSocket(wsUrl);
 
-    // Що робити, коли сервер щось "каже" в трубку:
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("Отримано сигнал від диспетчера:", data);
-      
-      // Якщо сервер каже, що є нова тривога або змінився її статус — оновлюємо дані!
-      if (data.type === 'NEW_INCIDENT' || data.type === 'UPDATE_INCIDENT') {
-        fetchMyIncident();
-      }
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'NEW_INCIDENT' || data.type === 'UPDATE_INCIDENT') {
+          fetchMyIncident();
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('WS відключено. Спроба перепідключення через 3 сек...');
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      wsRef.current = ws;
     };
 
-    ws.onclose = () => console.log('Зв\'язок з диспетчерською втрачено (WebSocket закрито)');
+    connectWebSocket();
 
-    // ==========================================
-    // 3. АВТОМАТИЧНИЙ GPS-ТРЕКЕР ЕКІПАЖУ
-    // ==========================================
+    // АВТОМАТИЧНИЙ GPS-ТРЕКЕР
     let watchId: number;
-    
     if ('geolocation' in navigator) {
-      // watchPosition сам спрацьовує щоразу, коли планшет змінює координати
       watchId = navigator.geolocation.watchPosition(
         async (position) => {
           const lat = position.coords.latitude;
           const lon = position.coords.longitude;
           setMyLocation({ lat, lon });
-
+          
           try {
-            // Відправляємо координати на бекенд (без відома охоронця, у фоні)
             await api.put(`/guards/location/?lat=${lat}&lon=${lon}`);
-          } catch (error) {
-            console.error("Не вдалося відправити локацію на сервер");
-          }
+          } catch (e) {}
         },
         (error) => console.error("Помилка GPS:", error),
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 5000 }
       );
-    } else {
-      alert("Ваш пристрій не підтримує GPS");
     }
 
-    // Коли охоронець закриває вкладку — кладемо трубку і вимикаємо GPS
     return () => {
-      ws.close();
+      if (wsRef.current) wsRef.current.close();
       if (watchId) navigator.geolocation.clearWatch(watchId);
     };
   }, []);
 
-  // 4. КНОПКА "ПРИЙНЯТИ ВИКЛИК"
+// МАЛЮЄМО МАРШРУТ ПРИ ПРИЙНЯТТІ ВИКЛИКУ
+  useEffect(() => {
+    if (
+      activeIncident?.status === 'ACKNOWLEDGED' && 
+      activeIncident.object_latitude !== null && 
+      activeIncident.object_longitude !== null && 
+      myLocation
+    ) {
+      getRoute(
+        myLocation.lat, 
+        myLocation.lon, 
+        activeIncident.object_latitude, 
+        activeIncident.object_longitude
+      );
+    } else {
+      setRouteCoords([]); 
+    }
+  }, [activeIncident?.status, myLocation]);;
+
   const handleAcknowledge = async () => {
     if (!activeIncident) return;
     try {
-      await api.put(`/incidents/${activeIncident.id}/`, {
-        status: 'ACKNOWLEDGED'
-      });
-      // Щойно ми змінили статус, бекенд сам розішле WebSocket сигнал, 
-      // і наш екран (та екран диспетчера) оновиться автоматично!
+      await api.put(`/incidents/${activeIncident.id}/`, { status: 'ACKNOWLEDGED' });
       fetchMyIncident(); 
     } catch (error) {
-      alert('Не вдалося підтвердити виклик! Перевірте інтернет.');
+      alert('Не вдалося підтвердити виклик!');
     }
   };
 
-  // ==========================================
-  // ВІЗУАЛЬНА ЧАСТИНА (ІНТЕРФЕЙС ПЛАНШЕТА)
-  // ==========================================
-
-  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white font-bold">Зв'язок із сервером...</div>;
-
-  // ЕКРАН 1: РЕЖИМ ОЧІКУВАННЯ (Зелений екран)
-  if (!activeIncident) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white p-6 text-center">
-        <div className="w-24 h-24 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
-          <div className="w-16 h-16 bg-emerald-500 rounded-full animate-pulse" />
-        </div>
-        <h1 className="text-3xl font-bold mb-2">Екіпаж на чергуванні</h1>
-        <p className="text-slate-400">Очікування команд від диспетчера...</p>
-        
-        {myLocation && (
-          <p className="mt-8 text-xs text-slate-500 font-mono">
-            GPS активний: {myLocation.lat.toFixed(4)}, {myLocation.lon.toFixed(4)}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  // ЕКРАН 2: ТРИВОГА! (Червоний екран, треба прийняти)
-  if (activeIncident.status === 'DISPATCHED') {
-    return (
-      <div className="h-screen w-full flex flex-col bg-red-600 text-white p-6">
-        <div className="flex-1 flex flex-col items-center justify-center text-center animate-pulse">
-          <h1 className="text-6xl font-black uppercase mb-4 tracking-widest text-white drop-shadow-lg">Тривога!</h1>
-          <h2 className="text-3xl font-bold mb-2">{activeIncident.object_name}</h2>
-          <p className="text-xl font-medium opacity-90">{activeIncident.object_address}</p>
-        </div>
-        
-        <button 
-          onClick={handleAcknowledge}
-          className="w-full bg-white text-red-700 font-black text-3xl py-10 rounded-2xl shadow-[0_10px_25px_rgba(0,0,0,0.5)] active:scale-95 transition-transform"
-        >
-          ПРИЙНЯТИ ВИКЛИК
-        </button>
-      </div>
-    );
-  }
-
-  // ЕКРАН 3: У ДОРОЗІ (Карта та інструкції)
   return (
-    <div className="h-screen w-full flex flex-col bg-slate-100">
-      <div className="bg-slate-900 text-white p-5 rounded-b-3xl shadow-xl z-10 relative">
-        <div className="flex justify-between items-center mb-3">
-          <span className="bg-red-500 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse">
-            Виїзд на об'єкт
-          </span>
-          <span className="text-slate-400 text-sm">Тривога #{activeIncident.id}</span>
-        </div>
-        <h1 className="text-2xl font-bold mb-1">{activeIncident.object_name}</h1>
-        <p className="text-lg text-slate-300 mb-4">📍 {activeIncident.object_address}</p>
-        
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-          <span className="text-xs text-slate-400 uppercase font-bold block mb-1">Інструкції для екіпажу:</span>
-          <p className="text-sm font-medium text-amber-400">
-            {activeIncident.object_instructions || 'Спеціальні інструкції відсутні'}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex-1 w-full relative z-0">
+    <div className="relative h-screen w-full bg-slate-900 overflow-hidden font-sans">
+      
+      {/* КАРТА (ЗАВЖДИ НА ФОНІ) */}
+      <div className="absolute inset-0 z-0">
         <MapContainer 
-          // Фокусуємо карту на координатах екіпажу, якщо вони є, або на центрі міста
           center={myLocation ? [myLocation.lat, myLocation.lon] : [47.653, 34.088]} 
           zoom={15} 
           zoomControl={false} 
@@ -185,14 +140,81 @@ export default function GuardView() {
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
-          {/* Маркер екіпажу (синій) */}
+          {/* Маркер авто */}
           {myLocation && (
             <Marker position={[myLocation.lat, myLocation.lon]}>
-              <Popup>Ваша позиція</Popup>
+              <Popup>Екіпаж</Popup>
             </Marker>
+          )}
+
+          {/* Маркер об'єкта під час тривоги */}
+          {activeIncident?.object_latitude && activeIncident?.object_longitude && (
+            <Marker position={[activeIncident.object_latitude, activeIncident.object_longitude]}>
+              <Popup>Об'єкт: {activeIncident.object_name}</Popup>
+            </Marker>
+          )}
+
+          {/* Лінія маршруту */}
+          {routeCoords.length > 0 && (
+            <Polyline positions={routeCoords} color="#3b82f6" weight={5} opacity={0.8} />
           )}
         </MapContainer>
       </div>
+
+      {/* UI: РЕЖИМ ОЧІКУВАННЯ */}
+      {!activeIncident && (
+        <div className="absolute top-4 left-4 right-4 z-10 bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-slate-200 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-slate-800 text-lg">Патрулювання</h3>
+            <p className="text-xs text-slate-500">Очікування команд...</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-xs font-bold text-emerald-700">GPS Активний</span>
+          </div>
+        </div>
+      )}
+
+      {/* UI: ТРИВОГА (ПІВ ЕКРАНА ЗНИЗУ) */}
+      {activeIncident?.status === 'DISPATCHED' && (
+        <div className="absolute bottom-0 left-0 right-0 z-20 bg-red-600 rounded-t-3xl shadow-[0_-10px_40px_rgba(220,38,38,0.5)] p-6 animate-slide-up">
+          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mb-6"></div>
+          <div className="text-center mb-8">
+            <h1 className="text-5xl font-black uppercase tracking-widest text-white drop-shadow-md mb-2">Тривога!</h1>
+            <h2 className="text-2xl font-bold text-white">{activeIncident.object_name}</h2>
+            <p className="text-lg text-red-100 font-medium mt-1">📍 {activeIncident.object_address}</p>
+          </div>
+          
+          <button 
+            onClick={handleAcknowledge}
+            className="w-full bg-white text-red-700 font-black text-2xl py-6 rounded-2xl shadow-xl active:scale-95 transition-transform"
+          >
+            ПРИЙНЯТИ ВИКЛИК
+          </button>
+        </div>
+      )}
+
+      {/* UI: МАРШРУТ (ПАНЕЛЬ ІНФОРМАЦІЇ ЗНИЗУ) */}
+      {activeIncident?.status === 'ACKNOWLEDGED' && (
+        <div className="absolute bottom-4 left-4 right-4 z-20 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+          <div className="bg-slate-900 p-4">
+            <div className="flex justify-between items-center mb-1">
+              <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse">
+                Екіпаж у дорозі
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-white leading-tight">{activeIncident.object_name}</h2>
+            <p className="text-sm text-slate-300 mt-1">📍 {activeIncident.object_address}</p>
+          </div>
+          
+          <div className="p-4 bg-slate-50">
+            <span className="text-xs text-slate-500 uppercase font-bold block mb-1">Інструкції для екіпажу:</span>
+            <p className="text-sm font-bold text-amber-700 bg-amber-100 p-3 rounded-xl border border-amber-200">
+              {activeIncident.object_instructions || 'Спеціальні інструкції відсутні'}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
