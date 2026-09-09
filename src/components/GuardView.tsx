@@ -182,9 +182,11 @@ export default function GuardView() {
 
   return (
     <div className="relative h-screen w-full bg-slate-900 overflow-hidden font-sans">
-      <button onClick={handleLogout} className="bg-slate-800 hover:bg-red-500 text-white px-4 py-2 rounded transition">
-            Вийти
-          </button>
+      <button 
+        onClick={handleLogout} 
+        className="absolute top-4 right-4 z-30 bg-slate-800 hover:bg-red-500 text-white px-4 py-2 rounded-xl shadow-lg transition">
+          Вийти
+      </button>
       {/* КАРТА (ЗАВЖДИ НА ФОНІ) */}
       <div className="absolute inset-0 z-0">
         <MapContainer 
