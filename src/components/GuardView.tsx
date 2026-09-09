@@ -235,19 +235,21 @@ export default function GuardView() {
         Вийти
       </button>
 
-      {/* UI: ТРИВОГА (Компактна, без скролу) */}
+
+      {/* UI: ТРИВОГА (Модальне вікно по центру екрана) */}
       {activeIncident?.status === 'DISPATCHED' && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-red-600 rounded-t-3xl shadow-[0_-10px_30px_rgba(220,38,38,0.5)] p-4 animate-slide-up">
-          <div className="w-10 h-1 bg-white/30 rounded-full mx-auto mb-3"></div>
-          <div className="text-center mb-4">
-            <h1 className="text-3xl font-black uppercase tracking-widest text-white drop-shadow-md mb-1">Тривога!</h1>
-            <h2 className="text-lg font-bold text-white leading-snug">{activeIncident.object_name}</h2>
-            <p className="text-xs text-red-100 font-medium mt-0.5">📍 {activeIncident.object_address}</p>
+        <div className="absolute inset-0 z-50 bg-red-600/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-fade-in text-center">
+          <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4 animate-bounce">
+            <span className="text-4xl">🚨</span>
           </div>
+          
+          <h1 className="text-5xl font-black uppercase tracking-widest text-white drop-shadow-lg mb-2">Тривога!</h1>
+          <h2 className="text-2xl font-bold text-white mb-1">{activeIncident.object_name}</h2>
+          <p className="text-base text-red-100 font-medium mb-8 max-w-xs">📍 {activeIncident.object_address}</p>
           
           <button 
             onClick={handleAcknowledge}
-            className="w-full bg-white text-red-700 font-black text-lg py-4 rounded-xl shadow-xl active:scale-95 transition-transform"
+            className="w-full max-w-sm bg-white text-red-700 font-black text-xl py-5 rounded-2xl shadow-[0_10px_25px_rgba(0,0,0,0.5)] active:scale-95 transition-transform"
           >
             ПРИЙНЯТИ ВИКЛИК
           </button>
