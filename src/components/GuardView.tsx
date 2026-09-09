@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../api';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+// 1. Додаємо імпорт useMap
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
@@ -23,7 +24,6 @@ interface SecurityObject {
   longitude: number | null;
 }
 
-// Кастомна іконка для машини екіпажу (яскраво-синій круг із машиною або чіткий бідж)
 const carIcon = L.divIcon({
   className: 'custom-car-marker',
   html: `<div style="background-color: #4dff29; width: 24px; height: 24px; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">🚗</div>`,
@@ -31,7 +31,6 @@ const carIcon = L.divIcon({
   iconAnchor: [12, 12],
 });
 
-// Кастомна іконка для звичайних об'єктів охорони
 const objectIcon = L.divIcon({
   className: 'custom-object-marker',
   html: `<div style="background-color: #6aa8ff; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>`,
@@ -40,15 +39,32 @@ const objectIcon = L.divIcon({
 });
 
 
+// 2. СТВОРЮЄМО КОМПОНЕНТ-НАВІГАТОР (АВТОФОКУС)
+function MapUpdater({ location }: { location: { lat: number; lon: number } | null }) {
+  const map = useMap(); // Отримуємо доступ до об'єкта карти Leaflet
+  
+  useEffect(() => {
+    if (location) {
+      // Плавно переміщуємо центр карти на нові координати екіпажу
+      map.setView([location.lat, location.lon], map.getZoom(), {
+        animate: true,
+        duration: 1 // Тривалість анімації польоту
+      });
+    }
+  }, [location, map]);
+  
+  return null; // Цей компонент нічого не малює, він лише керує камерою
+}
+
+
 export default function GuardView() {
   const [activeIncident, setActiveIncident] = useState<Incident | null>(null);
   const [allObjects, setAllObjects] = useState<SecurityObject[]>([]);
   const [myLocation, setMyLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
-   const navigate = useNavigate();
+  const navigate = useNavigate();
   const wsRef = useRef<WebSocket | null>(null);
 
-  // 1. Завантаження активної тривоги
   const fetchMyIncident = async () => {
     try {
       const response = await api.get('/incidents/');
@@ -61,7 +77,6 @@ export default function GuardView() {
     }
   };
 
-  // 2. Завантаження всіх об'єктів для карти патрулювання
   const fetchAllObjects = async () => {
     try {
       const response = await api.get('/objects/');
@@ -71,7 +86,6 @@ export default function GuardView() {
     }
   };
 
-  // ФУНКЦІЯ ПРОКЛАДАННЯ МАРШРУТУ (OSRM API)
   const getRoute = async (startLat: number, startLon: number, endLat: number, endLon: number) => {
     try {
       const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`);
@@ -90,14 +104,12 @@ export default function GuardView() {
     fetchMyIncident();
     fetchAllObjects();
 
-    // РОЗУМНИЙ WEBSOCKET З АВТОПЕРЕПІДКЛЮЧЕННЯМ
     const connectWebSocket = () => {
       const wsUrl = 'wss://guard-crm-backend-1.onrender.com/ws/incidents';
       const ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        // Будь-який сигнал про нову тривогу або зміну статусу змушує оновити дані
         if (data.type === 'NEW_INCIDENT' || data.type === 'UPDATE_INCIDENT') {
           fetchMyIncident();
         }
@@ -113,13 +125,10 @@ export default function GuardView() {
 
     connectWebSocket();
 
-    // РЕХУЛЯРНЕ ФОНОВЕ ОПИТУВАННЯ (FALLBACK) КОЖНІ 5 СЕКУНД
-    // Гарантує, що навіть якщо websocket мовчить, тривога все одно з'явиться автоматично
     const pollingInterval = setInterval(() => {
       fetchMyIncident();
     }, 5000);
 
-    // АВТОМАТИЧНИЙ GPS-ТРЕКЕР
     let watchId: number;
     if ('geolocation' in navigator) {
       watchId = navigator.geolocation.watchPosition(
@@ -144,7 +153,6 @@ export default function GuardView() {
     };
   }, []);
 
-  // МАЛЮЄМО МАРШРУТ ПРИ ПРИЙНЯТТІ ВИКЛИКУ
   useEffect(() => {
     if (
       activeIncident?.status === 'ACKNOWLEDGED' && 
@@ -179,11 +187,11 @@ export default function GuardView() {
     navigate('/login');
   };
 
-
   return (
-    <div className="relative h-screen w-full bg-slate-900 overflow-hidden font-sans">
+    // 3. ЗМІНА ТУТ: h-screen замінено на h-[100dvh] для ідеального розміру на мобілках
+    <div className="relative h-[100dvh] w-full bg-slate-900 overflow-hidden font-sans">
       
-      {/* КАРТА (ЗАВЖДИ НА ФОНІ) */}
+      {/* КАРТА */}
       <div className="absolute inset-0 z-0">
         <MapContainer 
           center={myLocation ? [myLocation.lat, myLocation.lon] : [47.653, 34.088]} 
@@ -193,6 +201,9 @@ export default function GuardView() {
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
+          {/* 4. ВСТАВЛЯЄМО НАШ НАВІГАТОР ДЛЯ КАМЕРИ */}
+          <MapUpdater location={myLocation} />
+
           {allObjects.map((obj) => {
             if (obj.latitude && obj.longitude) {
               return (
@@ -219,7 +230,7 @@ export default function GuardView() {
         </MapContainer>
       </div>
 
-      {/* ВЕРХНЯ ПАНЕЛЬ: Статус зліва (компактний) + Кнопка Вийти справа */}
+      {/* ВЕРХНЯ ПАНЕЛЬ */}
       <div className="absolute top-4 left-4 z-30 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-lg border border-slate-200 flex items-center space-x-3">
         <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
         <div>
@@ -234,7 +245,6 @@ export default function GuardView() {
       >
         Вийти
       </button>
-
 
       {/* UI: ТРИВОГА (Модальне вікно по центру екрана) */}
       {activeIncident?.status === 'DISPATCHED' && (
