@@ -3,6 +3,7 @@ import api from '../api';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { useNavigate } from 'react-router-dom';
 
 interface Incident {
   id: number;
@@ -38,12 +39,13 @@ const objectIcon = L.divIcon({
   iconAnchor: [9, 9],
 });
 
+
 export default function GuardView() {
   const [activeIncident, setActiveIncident] = useState<Incident | null>(null);
   const [allObjects, setAllObjects] = useState<SecurityObject[]>([]);
   const [myLocation, setMyLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
-  
+   const navigate = useNavigate();
   const wsRef = useRef<WebSocket | null>(null);
 
   // 1. Завантаження активної тривоги
@@ -112,7 +114,7 @@ export default function GuardView() {
     connectWebSocket();
 
     // РЕХУЛЯРНЕ ФОНОВЕ ОПИТУВАННЯ (FALLBACK) КОЖНІ 5 СЕКУНД
-    // Гарантує, що навіть якщо WebSocket "мовчить", тривога все одно з'явиться автоматично
+    // Гарантує, що навіть якщо websocket мовчить, тривога все одно з'явиться автоматично
     const pollingInterval = setInterval(() => {
       fetchMyIncident();
     }, 5000);
@@ -171,9 +173,18 @@ export default function GuardView() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    navigate('/login');
+  };
+
+
   return (
     <div className="relative h-screen w-full bg-slate-900 overflow-hidden font-sans">
-      
+      <button onClick={handleLogout} className="bg-slate-800 hover:bg-red-500 text-white px-4 py-2 rounded transition">
+            Вийти
+          </button>
       {/* КАРТА (ЗАВЖДИ НА ФОНІ) */}
       <div className="absolute inset-0 z-0">
         <MapContainer 
