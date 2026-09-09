@@ -182,11 +182,7 @@ export default function GuardView() {
 
   return (
     <div className="relative h-screen w-full bg-slate-900 overflow-hidden font-sans">
-      <button 
-        onClick={handleLogout} 
-        className="absolute top-4 right-4 z-30 bg-slate-800 hover:bg-red-500 text-white px-4 py-2 rounded-xl shadow-lg transition">
-          Вийти
-      </button>
+      
       {/* КАРТА (ЗАВЖДИ НА ФОНІ) */}
       <div className="absolute inset-0 z-0">
         <MapContainer 
@@ -197,7 +193,6 @@ export default function GuardView() {
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
-          {/* 1. ВСІ ОБ'ЄКТИ ОХОРОНИ НА КАРТІ (РЕЖИМ ПАТРУЛЮВАННЯ) */}
           {allObjects.map((obj) => {
             if (obj.latitude && obj.longitude) {
               return (
@@ -212,47 +207,47 @@ export default function GuardView() {
             return null;
           })}
 
-          {/* 2. МАРКЕР АВТО ЕКІПАЖУ */}
           {myLocation && (
             <Marker position={[myLocation.lat, myLocation.lon]} icon={carIcon}>
               <Popup>Ваш екіпаж</Popup>
             </Marker>
           )}
 
-          {/* 3. ЛІНІЯ МАРШРУТУ ДО ОБ'ЄКТА */}
           {routeCoords.length > 0 && (
             <Polyline positions={routeCoords} color="#3b82f6" weight={5} opacity={0.8} />
           )}
         </MapContainer>
       </div>
 
-      {/* UI: РЕЖИМ ОЧІКУВАННЯ */}
-      {!activeIncident && (
-        <div className="absolute top-4 left-4 right-4 z-10 bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-slate-200 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-slate-800 text-lg">Патрулювання</h3>
-            <p className="text-xs text-slate-500">Очікування команд...</p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="text-xs font-bold text-emerald-700">GPS Активний</span>
-          </div>
+      {/* ВЕРХНЯ ПАНЕЛЬ: Статус зліва (компактний) + Кнопка Вийти справа */}
+      <div className="absolute top-4 left-4 z-30 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-lg border border-slate-200 flex items-center space-x-3">
+        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
+        <div>
+          <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Патрулювання</h3>
+          <p className="text-[10px] text-slate-500">GPS активний</p>
         </div>
-      )}
+      </div>
 
-      {/* UI: ТРИВОГА (ПІВ ЕКРАНА ЗНИЗУ) */}
+      <button 
+        onClick={handleLogout} 
+        className="absolute top-4 right-4 z-30 bg-slate-800/90 hover:bg-red-500 text-white text-xs font-bold px-3 py-2.5 rounded-xl shadow-lg transition"
+      >
+        Вийти
+      </button>
+
+      {/* UI: ТРИВОГА (Компактна, без скролу) */}
       {activeIncident?.status === 'DISPATCHED' && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-red-600 rounded-t-3xl shadow-[0_-10px_40px_rgba(220,38,38,0.5)] p-6 animate-slide-up">
-          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mb-6"></div>
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-black uppercase tracking-widest text-white drop-shadow-md mb-2">Тривога!</h1>
-            <h2 className="text-2xl font-bold text-white">{activeIncident.object_name}</h2>
-            <p className="text-lg text-red-100 font-medium mt-1">📍 {activeIncident.object_address}</p>
+        <div className="absolute bottom-0 left-0 right-0 z-20 bg-red-600 rounded-t-3xl shadow-[0_-10px_30px_rgba(220,38,38,0.5)] p-4 animate-slide-up">
+          <div className="w-10 h-1 bg-white/30 rounded-full mx-auto mb-3"></div>
+          <div className="text-center mb-4">
+            <h1 className="text-3xl font-black uppercase tracking-widest text-white drop-shadow-md mb-1">Тривога!</h1>
+            <h2 className="text-lg font-bold text-white leading-snug">{activeIncident.object_name}</h2>
+            <p className="text-xs text-red-100 font-medium mt-0.5">📍 {activeIncident.object_address}</p>
           </div>
           
           <button 
             onClick={handleAcknowledge}
-            className="w-full bg-white text-red-700 font-black text-2xl py-6 rounded-2xl shadow-xl active:scale-95 transition-transform"
+            className="w-full bg-white text-red-700 font-black text-lg py-4 rounded-xl shadow-xl active:scale-95 transition-transform"
           >
             ПРИЙНЯТИ ВИКЛИК
           </button>
@@ -261,20 +256,20 @@ export default function GuardView() {
 
       {/* UI: МАРШРУТ (ПАНЕЛЬ ІНФОРМАЦІЇ ЗНИЗУ) */}
       {activeIncident?.status === 'ACKNOWLEDGED' && (
-        <div className="absolute bottom-4 left-4 right-4 z-20 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
-          <div className="bg-slate-900 p-4">
+        <div className="absolute bottom-4 left-4 right-4 z-20 bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+          <div className="bg-slate-900 p-3">
             <div className="flex justify-between items-center mb-1">
-              <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse">
+              <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest animate-pulse">
                 Екіпаж у дорозі
               </span>
             </div>
-            <h2 className="text-xl font-bold text-white leading-tight">{activeIncident.object_name}</h2>
-            <p className="text-sm text-slate-300 mt-1">📍 {activeIncident.object_address}</p>
+            <h2 className="text-base font-bold text-white leading-tight">{activeIncident.object_name}</h2>
+            <p className="text-xs text-slate-300 mt-0.5">📍 {activeIncident.object_address}</p>
           </div>
           
-          <div className="p-4 bg-slate-50">
-            <span className="text-xs text-slate-500 uppercase font-bold block mb-1">Інструкції для екіпажу:</span>
-            <p className="text-sm font-bold text-amber-700 bg-amber-100 p-3 rounded-xl border border-amber-200">
+          <div className="p-3 bg-slate-50">
+            <span className="text-[10px] text-slate-500 uppercase font-bold block mb-0.5">Інструкції для екіпажу:</span>
+            <p className="text-xs font-bold text-amber-700 bg-amber-100 p-2 rounded-lg border border-amber-200">
               {activeIncident.object_instructions || 'Спеціальні інструкції відсутні'}
             </p>
           </div>
