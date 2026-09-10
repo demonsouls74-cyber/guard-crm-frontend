@@ -187,20 +187,6 @@ export default function GuardView() {
     navigate('/login');
   };
 
-  const handleConnectTelegram = async () => {
-    try {
-      const response = await api.get('/telegram/link/');
-      if (response.data.already_linked) {
-        alert('Ваш Telegram вже успішно підключено!');
-      } else if (response.data.telegram_url) {
-        // Відкриваємо посилання у новій вкладці (або в додатку Telegram на телефоні)
-        window.open(response.data.telegram_url, '_blank');
-      }
-    } catch (error) {
-      console.error('Помилка генерації посилання:', error);
-      alert('Не вдалося згенерувати посилання для Telegram.');
-    }
-  };
   
   return (
     // 3. ЗМІНА ТУТ: h-screen замінено на h-[100dvh] для ідеального розміру на мобілках
